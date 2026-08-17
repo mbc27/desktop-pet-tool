@@ -667,31 +667,37 @@ function toggleWindow() {
     }
 }
 
-// 老板键 - 显示桌面（最小化其他所有应用，保留本应用）
+// 老板键 - 把桌面宠物收起到系统托盘（其他所有应用窗口保持不变）
+//
+// 需求语义：
+//   老板来了 → 桌面上的"桌面宠物小工具"立刻消失（收到托盘），
+//   桌面上的其他窗口/软件一概不动。用户通过托盘图标/托盘菜单再恢复显示。
+//
+// 实现：
+//   - 删除 PowerShell MinimizeAll / ToggleDesktop（那会最小化其他窗口，与需求相反）
+//   - 删除 macOS Cmd+Option+H（那会隐藏其他应用，与需求相反）
+//   - 只做一件事：mainWindow.hide() → 本窗口隐藏，托盘图标继续保留
+//   - 配合托盘菜单「显示/隐藏」、托盘左键点击 toggleWindow()，用户可随时恢复
 function triggerShowDesktop() {
-    if (process.platform === 'win32') {
-        // 用 MinimizeAll() 而非 ToggleDesktop()：
-        //   ToggleDesktop 是 toggle 状态（再次点击会还原所有最小化）
-        //   MinimizeAll 只最小化，不会因重复点击而"还原"
-        // PowerShell 执行完后，通过 callback 把本应用恢复显示，
-        // 实现效果：所有其他应用最小化，本应用（桌面宠物工具）保留在桌面。
-        const psCmd = '$w = New-Object -ComObject Shell.Application; $w.MinimizeAll(); Start-Sleep -Milliseconds 250; Write-Output done';
-        exec(`powershell -NoProfile -Command "${psCmd}"`, (err) => {
-            if (!err && mainWindow && !mainWindow.isDestroyed()) {
-                try {
-                    mainWindow.restore();          // 取消最小化状态
-                    mainWindow.show();              // 显示窗口
-                    mainWindow.focus();             // 抢回焦点
-                    mainWindow.setAlwaysOnTop(true, 'screen');  // 恢复置顶层级
-                } catch (e) {}
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        try {
+            // 清空任何遗留的鼠标穿透状态，防止隐藏时遗留副作用
+            if (mainWindow.setIgnoreMouseEvents) {
+                mainWindow.setIgnoreMouseEvents(false, { forward: true });
             }
-        });
-    } else if (process.platform === 'darwin') {
-        // macOS: 用 Cmd+Option+H 隐藏其他所有应用（保留本应用）
-        // 比 Cmd+H（只隐藏当前应用）更符合"老板来了"的语义
-        exec('osascript -e \'tell application "System Events" to keystroke "h" using {command down, option down}\'');
+            // 清空任务栏进度条（避免隐藏后残留进度条状态）
+            mainWindow.setProgressBar(-1);
+            // 关闭下载进度窗口（如果存在）
+            if (typeof closeDownloadProgressWindow === 'function') {
+                closeDownloadProgressWindow();
+            }
+            // 核心：把主窗口隐藏起来（托盘图标和托盘菜单依然可用）
+            mainWindow.hide();
+            console.log('[BossKey] 桌面宠物已隐藏到托盘（其他应用窗口未变动）');
+        } catch (e) {
+            console.warn('[BossKey] 隐藏失败:', e.message);
+        }
     }
-    // ⚠️ 删除原来的 mainWindow.hide() —— 那是导致本应用跑到托盘的元凶
 }
 
 // 开机自启
