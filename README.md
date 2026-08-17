@@ -53,7 +53,7 @@ A cross-platform (Windows/macOS) desktop floating pet widget built with **Electr
 
 ```bash
 # Clone
-git clone https://github.com/<your-username>/desktop-pet-tool.git
+git clone https://github.com/mbc27/desktop-pet-tool.git
 cd desktop-pet-tool
 
 # Install dependencies
