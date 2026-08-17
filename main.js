@@ -15,6 +15,81 @@ const { autoUpdater } = (() => {
 
 // 标记是否是手动触发的检查（手动检查时即使"无更新"也提示）
 let _isManualCheck = false;
+// 下载进度窗口（独立 BrowserWindow）
+let downloadProgressWindow = null;
+
+// 显示下载进度窗口
+function showDownloadProgressWindow() {
+    if (downloadProgressWindow && !downloadProgressWindow.isDestroyed()) {
+        downloadProgressWindow.show();
+        downloadProgressWindow.focus();
+        return;
+    }
+    downloadProgressWindow = new BrowserWindow({
+        width: 420,
+        height: 200,
+        parent: mainWindow,
+        modal: false,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        alwaysOnTop: true,
+        title: '正在下载更新',
+        autoHideMenuBar: true,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true
+        }
+    });
+
+    const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>正在下载更新</title>
+<style>
+* { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 24px; margin: 0; background: #f7f7f9; color: #333; text-align: center; }
+h2 { margin: 0 0 18px; font-size: 17px; font-weight: 600; color: #1f1f1f; }
+.progress-bar { width: 100%; height: 22px; background: #e2e2e8; border-radius: 11px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.06); }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #4CAF50, #66BB6A); width: 0%; transition: width 0.3s ease; border-radius: 11px; }
+.progress-text { margin-top: 12px; font-size: 13px; color: #555; line-height: 1.6; }
+.progress-percent { font-size: 22px; font-weight: 600; color: #4CAF50; margin-bottom: 6px; }
+.hint { margin-top: 12px; font-size: 11px; color: #999; }
+</style>
+</head>
+<body>
+<h2>桌面宠物工具 - 正在下载更新</h2>
+<div class="progress-percent" id="percent">0%</div>
+<div class="progress-bar"><div class="progress-fill" id="fill"></div></div>
+<div class="progress-text" id="text">准备中...</div>
+<div class="hint">下载完成后将自动弹窗提示安装</div>
+<script>
+function updateProgress(pct, transferred, total, bps) {
+    pct = Math.max(0, Math.min(100, Math.round(pct || 0)));
+    document.getElementById('fill').style.width = pct + '%';
+    document.getElementById('percent').textContent = pct + '%';
+    var dMB = (transferred / 1048576).toFixed(1);
+    var tMB = (total / 1048576).toFixed(1);
+    var sMB = (bps / 1048576).toFixed(2);
+    document.getElementById('text').textContent = dMB + ' / ' + tMB + ' MB  ·  ' + sMB + ' MB/s';
+}
+</script>
+</body>
+</html>`;
+    downloadProgressWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    downloadProgressWindow.on('closed', () => {
+        downloadProgressWindow = null;
+    });
+}
+
+// 关闭下载进度窗口
+function closeDownloadProgressWindow() {
+    if (downloadProgressWindow && !downloadProgressWindow.isDestroyed()) {
+        try { downloadProgressWindow.close(); } catch (e) {}
+    }
+    downloadProgressWindow = null;
+}
 
 function setupAutoUpdater() {
     if (!autoUpdater) return;
@@ -28,20 +103,27 @@ function setupAutoUpdater() {
         autoUpdater.on('error', (err) => {
             const msg = err && err.message ? err.message : String(err);
             console.error('[AutoUpdater] error:', msg);
-            // 错误时弹窗提示（手动检查或自动检查都弹，让用户看到失败原因）
+            closeDownloadProgressWindow();
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.setProgressBar(-1);
             }
             try {
                 dialog.showErrorBox(
-                    '检查更新失败',
-                    `更新检查出错：\n${msg}\n\n常见原因：\n1. 网络无法访问 github.com\n2. 防火墙/代理拦截\n3. 仓库未发布 Release`
+                    '更新失败',
+                    `更新过程出错：\n${msg}\n\n常见原因：\n1. 网络无法访问 github.com 或下载被中断\n2. 防火墙/代理拦截\n3. 仓库未发布 Release 或 .exe 损坏`
                 );
             } catch (e) {}
         });
 
         autoUpdater.on('update-available', (info) => {
-            _isManualCheck = false; // 弹窗后重置
+            const skipped = store.get('skippedUpdateVersion');
+            const isManual = _isManualCheck;
+            _isManualCheck = false;
+            // 自动检查时：如果用户已跳过此版本，则不再弹窗
+            if (!isManual && skipped && skipped === info.version) {
+                console.log('[AutoUpdater] 用户已跳过版本', info.version, '本会话不再提醒');
+                return;
+            }
             if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
                 mainWindow.show();
             }
@@ -55,7 +137,16 @@ function setupAutoUpdater() {
                 cancelId: 1
             }).then(({ response }) => {
                 if (response === 0 && autoUpdater) {
-                    autoUpdater.downloadUpdate();
+                    // 用户选择立即更新：先显示下载进度窗口，再开始下载
+                    showDownloadProgressWindow();
+                    autoUpdater.downloadUpdate().catch((e) => {
+                        closeDownloadProgressWindow();
+                        dialog.showErrorBox('下载失败', '无法开始下载：' + (e && e.message ? e.message : String(e)));
+                    });
+                } else if (response === 1) {
+                    // 用户选择"稍后再说"：记录跳过的版本号，本版本不再提醒
+                    store.set('skippedUpdateVersion', info.version);
+                    console.log('[AutoUpdater] 用户跳过版本', info.version, '已记录，本版本不再自动提醒');
                 }
             }).catch(() => {});
         });
@@ -79,13 +170,25 @@ function setupAutoUpdater() {
         });
 
         autoUpdater.on('download-progress', (progress) => {
+            const pct = progress.percent || 0;
+            const transferred = progress.transferred || 0;
+            const total = progress.total || 0;
+            const bps = progress.bytesPerSecond || 0;
+            // 更新独立进度窗口
+            if (downloadProgressWindow && !downloadProgressWindow.isDestroyed()) {
+                downloadProgressWindow.webContents.executeJavaScript(
+                    `updateProgress(${pct}, ${transferred}, ${total}, ${bps})`
+                ).catch(() => {});
+            }
+            // 同时设置任务栏进度（虽然 skipTaskbar，但保留无副作用）
             if (mainWindow && !mainWindow.isDestroyed()) {
-                const pct = Math.round(progress.percent || 0);
-                mainWindow.setProgressBar(pct / 100);
+                mainWindow.setProgressBar(Math.round(pct) / 100);
             }
         });
 
         autoUpdater.on('update-downloaded', () => {
+            // 下载完成：关闭进度窗口
+            closeDownloadProgressWindow();
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.setProgressBar(-1);
             }
@@ -208,7 +311,8 @@ const store = new Store({
         autoQuoteInterval: 300000,
         isAutoLaunch: false,
         bossKeyShortcut: 'CommandOrControl+Shift+D',
-        stickyNote: ''
+        stickyNote: '',
+        skippedUpdateVersion: null   // 用户点击"稍后再说"时记录的版本号，本版本不再提醒
     }
 });
 
