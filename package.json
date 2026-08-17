@@ -1,12 +1,12 @@
 {
   "name": "desktop-pet-tool",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "桌面悬浮宠物工具 - 集计时、键盘统计、趣味语录和应急防查岗功能于一体",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "build:win": "electron-builder --win",
+    "build:win": "electron-builder --win --publish never",
     "build:mac": "electron-builder --mac",
     "build:release": "electron-builder --win --publish always",
     "rebuild": "electron-rebuild"
@@ -29,6 +29,7 @@
     "directories": {
       "output": "build"
     },
+    "artifactName": "desktop-pet-tool-setup-${version}.${ext}",
     "publish": {
       "provider": "github",
       "owner": "mbc27",
