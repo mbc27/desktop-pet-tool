@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>桌面宠物工具</title>
+    <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+    <div class="pet-container">
+        <!-- 拖动手柄 + 关闭 -->
+        <div class="drag-handle">
+            <span class="title">🐾 桌面宠物</span>
+            <div class="window-controls">
+                <button id="btn-hide" class="ctrl-btn" title="最小化到托盘">—</button>
+                <button id="btn-quit" class="ctrl-btn ctrl-close" title="退出">✕</button>
+            </div>
+        </div>
+
+        <!-- 当前日期与时间 -->
+        <div class="clock-row">
+            <span id="clock-date" class="clock-date">----/--/--</span>
+            <span id="clock-time" class="clock-time">--:--:--</span>
+        </div>
+
+        <!-- 语录显示 -->
+        <div id="quote-display" class="quote-display">💡 准备好了吗？开始工作吧~</div>
+
+        <!-- 分隔线 -->
+        <div class="section-divider"></div>
+
+        <!-- 基础功能合集 -->
+        <div class="basic-section">
+            <div class="basic-header">
+                <span class="basic-title">⏱ 基础功能</span>
+                <button id="btn-basic-toggle" class="toggle-btn">收起</button>
+            </div>
+            <div class="basic-body" id="basic-body">
+                <!-- 数据展示区 -->
+                <div class="info-section">
+                    <div class="info-row">
+                        <span class="info-label">⏱ 正计时</span>
+                        <span id="timer-display" class="info-value">00:00:00</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">⏳ 倒计时</span>
+                        <span id="countdown-display" class="info-value">--:--:--</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">⌨ 今日敲击</span>
+                        <span id="key-count-display" class="info-value">0 次</span>
+                    </div>
+                </div>
+
+                <!-- 倒计时设置（时:分:秒） -->
+                <div class="countdown-setting">
+                    <div class="cd-input-row">
+                        <div class="cd-input-group">
+                            <input type="number" id="cd-hours" min="0" max="23" value="0">
+                            <span class="cd-label">时</span>
+                        </div>
+                        <div class="cd-input-group">
+                            <input type="number" id="cd-minutes" min="0" max="59" value="5">
+                            <span class="cd-label">分</span>
+                        </div>
+                        <div class="cd-input-group">
+                            <input type="number" id="cd-seconds" min="0" max="59" value="0">
+                            <span class="cd-label">秒</span>
+                        </div>
+                    </div>
+                    <div class="cd-btn-row">
+                        <button id="btn-set-countdown" class="action-btn btn-primary cd-main-btn">开始倒计时</button>
+                        <button id="btn-clear-countdown" class="action-btn cd-clear-btn">清除</button>
+                    </div>
+                </div>
+
+                <!-- 正计时控制 -->
+                <div class="btn-group-section">
+                    <div class="btn-section-title">正计时控制</div>
+                    <div class="btn-group">
+                        <button id="btn-timer-start" class="action-btn btn-start" title="开始正计时">▶ 开始</button>
+                        <button id="btn-timer-stop" class="action-btn btn-stop" title="停止正计时">⏹ 停止</button>
+                        <button id="btn-timer-reset" class="action-btn" title="重置正计时">↺ 重置</button>
+                        <button id="btn-key-reset" class="action-btn" title="重置今日敲击计数">⚡ 重置敲击</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 老板键按钮 -->
+        <button id="btn-boss" class="boss-btn">📌 老板来了！</button>
+
+        <!-- 透明度调节 -->
+        <div class="opacity-control">
+            <label class="opacity-label">
+                透明度 <span id="opacity-label">85%</span>
+            </label>
+            <input type="range" id="opacity-slider" min="0.3" max="1" step="0.05" value="0.85" class="opacity-slider">
+        </div>
+
+        <!-- 自动语录间隔 -->
+        <div class="opacity-control">
+            <label class="opacity-label">
+                语录间隔 <span id="quote-interval-label">5</span> 分钟
+            </label>
+            <input type="range" id="quote-interval-slider" min="1" max="60" step="1" value="5" class="opacity-slider">
+        </div>
+
+        <!-- 开机自启 + 来一句 -->
+        <div class="auto-launch-row">
+            <label>
+                <input type="checkbox" id="auto-launch-checkbox"> 开机自启
+            </label>
+            <button id="btn-show-quote" class="action-btn">💬 来一句</button>
+        </div>
+
+        <!-- 分隔线 -->
+        <div class="section-divider"></div>
+
+        <!-- 便签功能 -->
+        <div class="sticky-section">
+            <div class="sticky-header">
+                <span class="sticky-title">📝 便签</span>
+                <button id="btn-sticky-toggle" class="toggle-btn">展开</button>
+            </div>
+            <div class="sticky-body" id="sticky-body" style="display:none;">
+                <textarea id="sticky-note" class="sticky-note" placeholder="在这里写下你的想法..."></textarea>
+                <div class="sticky-footer">
+                    <span class="sticky-save-status" id="sticky-save-status">已自动保存</span>
+                    <button id="btn-sticky-clear" class="action-btn small-btn">清空</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 视频播放 -->
+        <div class="video-section">
+            <div class="video-header">
+                <span class="video-title">🎬 刷视频</span>
+                <button id="btn-video-toggle" class="toggle-btn">展开</button>
+            </div>
+            <div class="video-body" id="video-body" style="display:none;">
+                <div class="video-platforms">
+                    <button class="platform-btn" data-url="https://www.douyin.com/?recommend=1" data-name="抖音" data-zoom="0.45">抖音</button>
+                    <button class="platform-btn" data-url="https://www.kuaishou.com/" data-name="快手" data-zoom="0.45">快手</button>
+                    <button class="platform-btn" data-url="https://m.bilibili.com/" data-name="B站" data-zoom="1">B站</button>
+                </div>
+                <div class="video-nav">
+                    <button id="btn-video-reload" class="nav-btn" title="刷新">⟳</button>
+                    <button id="btn-video-new-win" class="nav-btn" title="新窗口播放">⛶</button>
+                    <button id="btn-video-close" class="nav-btn" title="关闭">✕</button>
+                </div>
+                <webview id="video-webview" class="video-webview" src="about:blank" allowpopups></webview>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

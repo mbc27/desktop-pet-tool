@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+build/
+build8/
+build10/
+dist/
+out/
+.eb-cache/
+
+# Electron Builder caches
+*.app
+*.dmg
+*.exe
+*.blockmap
+*.nupkg
+*.snap
+
+# Keep source assets but ignore build artifacts
+!assets/**
+!src/**
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test files
+test-uiohook.js
