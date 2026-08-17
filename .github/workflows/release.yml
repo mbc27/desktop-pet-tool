@@ -27,14 +27,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish to GitHub Release
+      - name: Build installer (electron-builder)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build:release
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:win
 
-      - name: Upload build artifacts (fallback)
-        if: always()
+      - name: List build outputs
+        shell: pwsh
+        run: |
+          Write-Host "=== Build outputs ==="
+          Get-ChildItem -Path build -Recurse -File | Select-Object Name, Length, FullName | Format-Table -AutoSize
+
+      - name: Upload .exe and metadata to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # 上传 NSIS 安装程序 + 增量更新所需文件
+          files: |
+            build/*.exe
+            build/*.exe.blockmap
+            build/latest*.yml
+          # 不覆盖已存在的 asset，避免冲突
+          fail_on_unmatched_files: false
+          generate_release_notes: false
+
+      - name: Upload build artifacts (for debugging)
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: windows-installer
           path: |
