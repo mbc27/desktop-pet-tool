@@ -1,6 +1,6 @@
 {
   "name": "desktop-pet-tool",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "桌面悬浮宠物工具 - 集计时、键盘统计、趣味语录和应急防查岗功能于一体",
   "main": "main.js",
   "scripts": {

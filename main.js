@@ -13,6 +13,9 @@ const { autoUpdater } = (() => {
     }
 })();
 
+// 标记是否是手动触发的检查（手动检查时即使"无更新"也提示）
+let _isManualCheck = false;
+
 function setupAutoUpdater() {
     if (!autoUpdater) return;
 
@@ -23,10 +26,25 @@ function setupAutoUpdater() {
         autoUpdater.allowPrerelease = false;
 
         autoUpdater.on('error', (err) => {
-            console.error('[AutoUpdater] error:', err && err.message ? err.message : err);
+            const msg = err && err.message ? err.message : String(err);
+            console.error('[AutoUpdater] error:', msg);
+            // 错误时弹窗提示（手动检查或自动检查都弹，让用户看到失败原因）
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.setProgressBar(-1);
+            }
+            try {
+                dialog.showErrorBox(
+                    '检查更新失败',
+                    `更新检查出错：\n${msg}\n\n常见原因：\n1. 网络无法访问 github.com\n2. 防火墙/代理拦截\n3. 仓库未发布 Release`
+                );
+            } catch (e) {}
         });
 
         autoUpdater.on('update-available', (info) => {
+            _isManualCheck = false; // 弹窗后重置
+            if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+                mainWindow.show();
+            }
             dialog.showMessageBox(mainWindow, {
                 type: 'info',
                 title: '发现新版本',
@@ -42,8 +60,22 @@ function setupAutoUpdater() {
             }).catch(() => {});
         });
 
-        autoUpdater.on('update-not-available', () => {
-            console.log('[AutoUpdater] 当前已是最新版本');
+        autoUpdater.on('update-not-available', (info) => {
+            console.log('[AutoUpdater] 当前已是最新版本', info && info.version);
+            // 仅在手动检查时弹窗提示，避免每次启动都打扰
+            if (_isManualCheck) {
+                _isManualCheck = false;
+                try {
+                    dialog.showMessageBox(mainWindow, {
+                        type: 'info',
+                        title: '已是最新版本',
+                        message: '桌面宠物工具 已是最新版本',
+                        detail: `当前版本：v${app.getVersion()}`,
+                        buttons: ['好的'],
+                        defaultId: 0
+                    }).catch(() => {});
+                } catch (e) {}
+            }
         });
 
         autoUpdater.on('download-progress', (progress) => {
@@ -73,33 +105,81 @@ function setupAutoUpdater() {
             }).catch(() => {});
         });
 
-        // 应用启动 10 秒后检查一次更新（避免干扰启动流程）
+        // 应用启动 10 秒后自动检查一次更新（避免干扰启动流程）
         setTimeout(() => {
             if (!app.isPackaged) {
                 console.log('[AutoUpdater] 开发模式下跳过自动更新检查');
                 return;
             }
             try {
-                autoUpdater.checkForUpdates();
+                _isManualCheck = false;
+                autoUpdater.checkForUpdates().catch(e => {
+                    console.warn('[AutoUpdater] 自动检查失败:', e.message);
+                });
             } catch (e) {
                 console.warn('[AutoUpdater] 检查更新失败:', e.message);
             }
         }, 10000);
 
-        // IPC：用户手动检查更新
+        // IPC：用户手动检查更新（来自渲染层调用）
         ipcMain.handle('check-for-updates', async () => {
             if (!autoUpdater || !app.isPackaged) {
                 return { ok: false, message: '当前环境不支持自动更新' };
             }
             try {
+                _isManualCheck = true;
                 await autoUpdater.checkForUpdates();
                 return { ok: true };
             } catch (e) {
+                _isManualCheck = false;
                 return { ok: false, message: e.message || String(e) };
             }
         });
     } catch (e) {
         console.warn('[AutoUpdater] 初始化失败:', e.message);
+    }
+}
+
+// 托盘菜单触发的"手动检查更新"
+function manualCheckForUpdates() {
+    if (!autoUpdater || !app.isPackaged) {
+        try {
+            dialog.showMessageBox(mainWindow, {
+                type: 'warning',
+                title: '不支持自动更新',
+                message: '当前环境不支持自动更新',
+                detail: '可能是开发模式运行（npm start），或 electron-updater 模块加载失败。\n请前往 GitHub Release 页面手动下载：\nhttps://github.com/mbc27/desktop-pet-tool/releases',
+                buttons: ['打开 Release 页面', '关闭'],
+                defaultId: 0
+            }).then(({ response }) => {
+                if (response === 0) {
+                    shell.openExternal('https://github.com/mbc27/desktop-pet-tool/releases');
+                }
+            }).catch(() => {});
+        } catch (e) {}
+        return;
+    }
+    // 标记为手动检查，update-not-available 时会弹窗提示"已是最新版本"
+    _isManualCheck = true;
+    // 弹窗告知用户在检查中
+    try {
+        dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: '检查更新',
+            message: '正在检查更新...',
+            detail: `当前版本：v${app.getVersion()}\n正在连接 GitHub 检查最新版本`,
+            buttons: ['好的']
+        }).catch(() => {});
+    } catch (e) {}
+    // 触发检查
+    try {
+        autoUpdater.checkForUpdates().catch(e => {
+            _isManualCheck = false;
+            console.warn('[AutoUpdater] 手动检查失败:', e.message);
+        });
+    } catch (e) {
+        _isManualCheck = false;
+        console.warn('[AutoUpdater] 手动检查失败:', e.message);
     }
 }
 
@@ -454,6 +534,7 @@ function createTray() {
             setKeyCountToday(0);
             if (mainWindow) mainWindow.webContents.send('key-count-update', 0);
         } },
+        { label: '检查更新...', click: () => manualCheckForUpdates() },
         { type: 'separator' },
         { label: '开机自启', type: 'checkbox', checked: store.get('isAutoLaunch'),
           click: (item) => setAutoLaunch(item.checked) },
@@ -482,20 +563,31 @@ function toggleWindow() {
     }
 }
 
-// 老板键 - 显示桌面
+// 老板键 - 显示桌面（最小化其他所有应用，保留本应用）
 function triggerShowDesktop() {
     if (process.platform === 'win32') {
-        exec('powershell -NoProfile -Command "(New-Object -ComObject Shell.Application).ToggleDesktop()"', (err) => {
-            if (err) {
-                exec('powershell -NoProfile -Command "$w = New-Object -ComObject Shell.Application; $w.MinimizeAll()"');
+        // 用 MinimizeAll() 而非 ToggleDesktop()：
+        //   ToggleDesktop 是 toggle 状态（再次点击会还原所有最小化）
+        //   MinimizeAll 只最小化，不会因重复点击而"还原"
+        // PowerShell 执行完后，通过 callback 把本应用恢复显示，
+        // 实现效果：所有其他应用最小化，本应用（桌面宠物工具）保留在桌面。
+        const psCmd = '$w = New-Object -ComObject Shell.Application; $w.MinimizeAll(); Start-Sleep -Milliseconds 250; Write-Output done';
+        exec(`powershell -NoProfile -Command "${psCmd}"`, (err) => {
+            if (!err && mainWindow && !mainWindow.isDestroyed()) {
+                try {
+                    mainWindow.restore();          // 取消最小化状态
+                    mainWindow.show();              // 显示窗口
+                    mainWindow.focus();             // 抢回焦点
+                    mainWindow.setAlwaysOnTop(true, 'screen');  // 恢复置顶层级
+                } catch (e) {}
             }
         });
     } else if (process.platform === 'darwin') {
-        exec('osascript -e \'tell application "System Events" to keystroke "h" using command down\'');
+        // macOS: 用 Cmd+Option+H 隐藏其他所有应用（保留本应用）
+        // 比 Cmd+H（只隐藏当前应用）更符合"老板来了"的语义
+        exec('osascript -e \'tell application "System Events" to keystroke "h" using {command down, option down}\'');
     }
-    if (mainWindow && mainWindow.isVisible()) {
-        mainWindow.hide();
-    }
+    // ⚠️ 删除原来的 mainWindow.hide() —— 那是导致本应用跑到托盘的元凶
 }
 
 // 开机自启
