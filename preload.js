@@ -46,5 +46,8 @@ contextBridge.exposeInMainWorld('petAPI', {
     setInteractiveRects: (rects) => ipcRenderer.send('set-interactive-rects', rects),
 
     // 视频窗口
-    openVideoWindow: (url) => ipcRenderer.send('open-video-window', url)
+    openVideoWindow: (url) => ipcRenderer.send('open-video-window', url),
+
+    // 自动更新
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates')
 });

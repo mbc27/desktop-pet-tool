@@ -1,7 +1,107 @@
 // Electron 主进程 - 桌面宠物工具
-const { app, BrowserWindow, ipcMain, Tray, Menu, globalShortcut, nativeImage, shell, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, globalShortcut, nativeImage, shell, screen, dialog } = require('electron');
 const path = require('path');
 const { exec } = require('child_process');
+
+// ===== 自动更新（GitHub Releases） =====
+const { autoUpdater } = (() => {
+    try {
+        return require('electron-updater');
+    } catch (e) {
+        console.warn('electron-updater 加载失败，自动更新功能不可用:', e.message);
+        return { autoUpdater: null };
+    }
+})();
+
+function setupAutoUpdater() {
+    if (!autoUpdater) return;
+
+    try {
+        autoUpdater.autoDownload = false;           // 不后台静默下载，由用户确认
+        autoUpdater.autoInstallOnAppQuit = true;
+        autoUpdater.allowDowngrade = false;
+        autoUpdater.allowPrerelease = false;
+
+        autoUpdater.on('error', (err) => {
+            console.error('[AutoUpdater] error:', err && err.message ? err.message : err);
+        });
+
+        autoUpdater.on('update-available', (info) => {
+            dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: '发现新版本',
+                message: `桌面宠物工具 v${info.version} 已发布`,
+                detail: `当前版本：v${app.getVersion()}\n是否现在下载并安装更新？`,
+                buttons: ['立即更新', '稍后再说'],
+                defaultId: 0,
+                cancelId: 1
+            }).then(({ response }) => {
+                if (response === 0 && autoUpdater) {
+                    autoUpdater.downloadUpdate();
+                }
+            }).catch(() => {});
+        });
+
+        autoUpdater.on('update-not-available', () => {
+            console.log('[AutoUpdater] 当前已是最新版本');
+        });
+
+        autoUpdater.on('download-progress', (progress) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                const pct = Math.round(progress.percent || 0);
+                mainWindow.setProgressBar(pct / 100);
+            }
+        });
+
+        autoUpdater.on('update-downloaded', () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.setProgressBar(-1);
+            }
+            dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: '更新下载完成',
+                message: '新版本已下载完成',
+                detail: '点击「立即安装」将退出并安装更新。',
+                buttons: ['立即安装', '稍后安装'],
+                defaultId: 0,
+                cancelId: 1
+            }).then(({ response }) => {
+                if (response === 0) {
+                    isQuitting = true;
+                    autoUpdater.quitAndInstall(false, true);
+                }
+            }).catch(() => {});
+        });
+
+        // 应用启动 10 秒后检查一次更新（避免干扰启动流程）
+        setTimeout(() => {
+            if (!app.isPackaged) {
+                console.log('[AutoUpdater] 开发模式下跳过自动更新检查');
+                return;
+            }
+            try {
+                autoUpdater.checkForUpdates();
+            } catch (e) {
+                console.warn('[AutoUpdater] 检查更新失败:', e.message);
+            }
+        }, 10000);
+
+        // IPC：用户手动检查更新
+        ipcMain.handle('check-for-updates', async () => {
+            if (!autoUpdater || !app.isPackaged) {
+                return { ok: false, message: '当前环境不支持自动更新' };
+            }
+            try {
+                await autoUpdater.checkForUpdates();
+                return { ok: true };
+            } catch (e) {
+                return { ok: false, message: e.message || String(e) };
+            }
+        });
+    } catch (e) {
+        console.warn('[AutoUpdater] 初始化失败:', e.message);
+    }
+}
 
 // ===== 单实例锁：防止任务栏出现多个实例 =====
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -548,6 +648,9 @@ app.whenReady().then(() => {
 
     // 启动主进程级穿透检测轮询
     startPassthroughPolling();
+
+    // 初始化自动更新（只在打包后生效）
+    setupAutoUpdater();
 
     // 注册老板键全局快捷键
     try {
